@@ -18,8 +18,9 @@ jobs:
         with:
           node-version: 20
 
-      - name: Cai dat Dependencies & Sync Capacitor
+      - name: Lam sach va Cai dat Dependencies
         run: |
+          rm -rf node_modules package-lock.json
           npm install
           npx cap sync ios
 

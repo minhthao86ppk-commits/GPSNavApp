@@ -26,13 +26,23 @@ jobs:
 
       - name: Bien dich Xcode
         run: |
-          xcodebuild -workspace ios/App/App.xcworkspace \
-                     -scheme App \
-                     -configuration Release \
-                     -destination 'generic/platform=iOS' \
-                     -derivedDataPath build \
-                     CODE_SIGNING_ALLOWED=NO \
-                     CODE_SIGNING_REQUIRED=NO
+          if [ -d "ios/App/App.xcworkspace" ]; then
+            xcodebuild -workspace ios/App/App.xcworkspace \
+                       -scheme App \
+                       -configuration Release \
+                       -destination 'generic/platform=iOS' \
+                       -derivedDataPath build \
+                       CODE_SIGNING_ALLOWED=NO \
+                       CODE_SIGNING_REQUIRED=NO
+          else
+            xcodebuild -project ios/App/App.xcodeproj \
+                       -scheme App \
+                       -configuration Release \
+                       -destination 'generic/platform=iOS' \
+                       -derivedDataPath build \
+                       CODE_SIGNING_ALLOWED=NO \
+                       CODE_SIGNING_REQUIRED=NO
+          fi
 
       - name: Dong goi thanh IPA
         run: |

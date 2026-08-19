@@ -16,7 +16,6 @@
             --brand-dark: #0f172a;
             --brand-blue: #2563eb;
             --brand-danger: #ef4444;
-            --brand-success: #16a34a;
             --brand-record: #f97316;
         }
 
@@ -24,6 +23,7 @@
             margin: 0; padding: 0; height: 100%; width: 100%; 
             font-family: 'Plus Jakarta Sans', sans-serif; 
             overflow: hidden;
+            background: #000;
         }
 
         #map {
@@ -42,11 +42,11 @@
 
         .leaflet-bar, .leaflet-control-layers {
             border: none !important;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
             border-radius: 12px !important;
             overflow: hidden;
             background: rgba(255, 255, 255, 0.95) !important;
-            backdrop-filter: blur(6px);
+            backdrop-filter: blur(8px);
         }
 
         .leaflet-bar a {
@@ -143,7 +143,6 @@
             align-items: center;
             justify-content: space-between;
             gap: 10px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             border: 1px solid rgba(0,0,0,0.06);
         }
 
@@ -250,16 +249,13 @@
             background: #f1f5f9;
             color: var(--brand-dark);
         }
-        #btn-recenter:active, #btn-secondary:not(:disabled):active {
-            background: #e2e8f0;
-        }
 
         .bar-warn {
             background: var(--brand-danger) !important;
             border-color: var(--brand-danger);
         }
         .bar-warn .status-main, 
-        .bar-warn .status-sub,
+        .bar-warn .status-sub, 
         .bar-warn .status-progress { 
             color: #ffffff !important; 
         }
@@ -267,11 +263,6 @@
             background: rgba(255, 255, 255, 0.25);
             color: #ffffff;
         }
-        .bar-warn .status-main {
-            animation: pulse 1s infinite;
-        }
-
-        @keyframes pulse { 50% { opacity: 0.7; } }
 
         .user-arrow-wrapper {
             position: relative;
@@ -305,7 +296,6 @@
 <div id="map"></div>
 
 <input type="file" id="gpxFileInput" accept=".gpx" style="display: none;">
-<audio id="silentAudio" loop style="display:none;" src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"></audio>
 
 <div class="compact-bottom-bar" id="ctrlBar">
     <button id="btn-action" class="btn-circle shadow-sm" title="Thao tác chính">
@@ -316,12 +306,12 @@
         <div class="info-header">
             <p class="status-main" id="txtMain">
                 <span class="rec-dot" id="recDot"></span>
-                <span id="txtStatus">Chọn file GPX để bắt đầu</span>
+                <span id="txtStatus">Đang tìm tín hiệu GPS...</span>
             </p>
             <span class="badge-speed" id="txtSpeed"><i class="bi bi-speedometer2 me-1"></i>0 km/h</span>
         </div>
         <div class="info-sub-row">
-            <p class="status-sub" id="txtSub">Chưa nạp tệp dẫn đường</p>
+            <p class="status-sub" id="txtSub">Chờ vị trí</p>
             <p class="status-progress" id="txtProgress">-- km</p>
         </div>
     </div>
@@ -341,16 +331,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
 <script>
-    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
-    const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20 });
     const esriSatellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
+    const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20 });
+    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
     const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 });
 
     const map = L.map('map', { 
         zoomControl: true, 
-        touchZoom: true, 
-        scrollWheelZoom: true, 
-        doubleClickZoom: true,
         layers: [esriSatellite]
     }).setView([21.0285, 105.8542], 16);
 
@@ -368,6 +355,7 @@
     let wakeLock = null;
     let lastLat = null, lastLng = null;
     let lastPosition = null;
+    let hasCenteredInitial = false;
 
     let gpxLayer = null;
     let routeGeoJSON = null;
@@ -383,6 +371,25 @@
     let userMarker = null;
     let accuracyCircle = null;
 
+    // Web Audio API để giữ app không bị đóng băng khi tắt màn hình
+    let audioCtx = null;
+    function enableBackgroundAudio() {
+        try {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                gain.gain.value = 0.001; // Âm lượng gần như bằng 0
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        } catch(e) {}
+    }
+
     const ctrlBar = document.getElementById('ctrlBar');
     const btnAction = document.getElementById('btn-action');
     const actionIcon = document.getElementById('actionIcon');
@@ -392,7 +399,6 @@
     const gpxFileInput = document.getElementById('gpxFileInput');
     const modeNav = document.getElementById('mode-nav');
     const modeRecord = document.getElementById('mode-record');
-    const silentAudio = document.getElementById('silentAudio');
 
     const txtStatus = document.getElementById('txtStatus');
     const txtSpeed = document.getElementById('txtSpeed');
@@ -418,16 +424,16 @@
             modeRecord.classList.remove('active');
             btnAction.style.background = 'var(--brand-blue)';
             secondaryIcon.className = "bi bi-folder2-open";
-            btnSecondary.title = "Nạp tệp GPX từ thiết bị";
+            btnSecondary.title = "Nạp tệp GPX";
             btnSecondary.disabled = false;
             
             if (mainRouteLine) {
-                txtStatus.innerText = "Lộ trình đã sẵn sàng";
+                txtStatus.innerText = "Lộ trình sẵn sàng";
                 txtSub.innerText = "Bấm Play để bắt đầu";
                 txtProgress.innerText = `${totalRouteLength.toFixed(1)} km`;
             } else {
                 txtStatus.innerText = "Chế độ Dẫn đường";
-                txtSub.innerText = "Chọn file GPX để nạp lộ trình";
+                txtSub.innerText = "Nạp file GPX để dẫn đường";
                 txtProgress.innerText = "-- km";
             }
         } else {
@@ -435,7 +441,7 @@
             modeNav.classList.remove('active');
             btnAction.style.background = 'var(--brand-record)';
             secondaryIcon.className = "bi bi-download";
-            btnSecondary.title = "Lưu và tải file GPX";
+            btnSecondary.title = "Tải file GPX";
             btnSecondary.disabled = recordedPoints.length === 0;
 
             txtStatus.innerText = "Sẵn sàng ghi lộ trình";
@@ -458,8 +464,7 @@
 
         const reader = new FileReader();
         reader.onload = function(evt) {
-            const gpxData = evt.target.result;
-            loadGpxData(gpxData, file.name);
+            loadGpxData(evt.target.result, file.name);
         };
         reader.readAsText(file);
     });
@@ -483,48 +488,25 @@
             if (!mainRouteLine) mainRouteLine = routeGeoJSON.features[0];
 
             totalRouteLength = turf.length(mainRouteLine, { units: 'kilometers' });
-
             txtStatus.innerText = "Đã nạp: " + fileName;
-            txtSub.innerText = "Bấm Play để bắt đầu đi lại";
+            txtSub.innerText = "Bấm Play để bắt đầu";
             txtProgress.innerText = `${totalRouteLength.toFixed(1)} km`;
         }).addTo(map);
     }
 
-    // DUY TRÌ TIẾN TRÌNH CHẠY NGẦM KHI TẮT MÀN HÌNH (BACKGROUND KEEP-ALIVE)
-    function startBackgroundService() {
-        try {
-            if (silentAudio) {
-                silentAudio.play().catch(() => {});
-            }
-        } catch(e){}
-    }
-
-    function stopBackgroundService() {
-        try {
-            if (silentAudio) {
-                silentAudio.pause();
-            }
-        } catch(e){}
-    }
-
     btnAction.addEventListener('click', async function() {
+        enableBackgroundAudio();
+
         if (isRunning) {
             stopProcess();
             return;
         }
 
         if (currentMode === 'nav' && !mainRouteLine) {
-            alert("Vui lòng bấm nút thư mục để chọn tệp .GPX trước khi bắt đầu!");
+            alert("Vui lòng nạp file .GPX trước khi bắt đầu dẫn đường!");
             gpxFileInput.click();
             return;
         }
-
-        if (!navigator.geolocation) {
-            alert("Thiết bị không hỗ trợ định vị GPS!");
-            return;
-        }
-
-        startBackgroundService();
 
         if ('wakeLock' in navigator) {
             try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
@@ -547,12 +529,6 @@
         } else {
             txtStatus.innerText = "Đang dẫn đường...";
         }
-
-        watchId = navigator.geolocation.watchPosition(onGpsSuccess, onGpsError, {
-            enableHighAccuracy: true,
-            timeout: 8000,
-            maximumAge: 0
-        });
     });
 
     function stopProcess() {
@@ -562,9 +538,6 @@
         ctrlBar.className = "compact-bottom-bar";
         txtSpeed.innerHTML = `<i class="bi bi-speedometer2 me-1"></i>0 km/h`;
 
-        stopBackgroundService();
-
-        if (watchId) navigator.geolocation.clearWatch(watchId);
         if (wakeLock) { wakeLock.release(); wakeLock = null; }
         if (timerInterval) clearInterval(timerInterval);
 
@@ -576,12 +549,32 @@
         }
     }
 
+    // BẮT ĐẦU CHẠY GPS NGAY KHI MỞ APP
+    function startContinuousGPS() {
+        if (!navigator.geolocation) {
+            txtStatus.innerText = "Thiết bị không có GPS";
+            return;
+        }
+
+        watchId = navigator.geolocation.watchPosition(
+            onGpsSuccess,
+            (err) => {
+                console.warn(err);
+                txtStatus.innerText = "Chờ tín hiệu vệ tinh...";
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 15000,
+                maximumAge: 0
+            }
+        );
+    }
+
     function onGpsSuccess(position) {
         const accuracyMet = Math.round(position.coords.accuracy || 0);
-
-        // BỘ LỌC CHỐNG NHẢY TỌA ĐỘ KHI BẮT SÓNG YẾU: Bỏ qua tọa độ có sai số > 25 mét
-        if (accuracyMet > 25) {
-            console.warn("Bỏ qua điểm do sai số cao:", accuracyMet);
+        
+        // BỘ LỌC THÔNG MINH: Cho phép lấy tọa độ nếu độ chính xác dưới 65m
+        if (accuracyMet > 65) {
             return;
         }
 
@@ -590,17 +583,27 @@
         const currentPt = turf.point([lastLng, lastLat]);
         const speedKmh = position.coords.speed ? Math.round(position.coords.speed * 3.6) : 0;
 
+        // Tự động căn giữa bản đồ về vị trí người dùng lần đầu tiên
+        if (!hasCenteredInitial) {
+            map.setView([lastLat, lastLng], 17);
+            hasCenteredInitial = true;
+            if (!isRunning) {
+                txtStatus.innerText = currentMode === 'nav' ? "Đã nhận vị trí GPS" : "Sẵn sàng ghi";
+                txtSub.innerText = "Độ chính xác: ±" + accuracyMet + "m";
+            }
+        }
+
         updateUserMarker(position);
         txtSpeed.innerHTML = `<i class="bi bi-speedometer2 me-1"></i>${speedKmh} km/h`;
 
-        if (currentMode === 'nav' && mainRouteLine) {
+        if (currentMode === 'nav' && mainRouteLine && isRunning) {
             const distanceMet = Math.round(turf.pointToLineDistance(currentPt, mainRouteLine, { units: 'kilometers' }) * 1000);
             const tolerance = Math.max(25, accuracyMet);
 
             if (distanceMet > tolerance) {
                 ctrlBar.className = "compact-bottom-bar bar-warn";
                 txtStatus.innerText = "CẢNH BÁO: SAI LỘ TRÌNH!";
-                txtSub.innerText = `Lệch đường cũ: ${distanceMet}m`;
+                txtSub.innerText = `Lệch đường: ${distanceMet}m`;
 
                 if (!window.lastSpeakTime || Date.now() - window.lastSpeakTime > 15000) {
                     speak("Bạn đã đi sai lộ trình cũ, hãy quay lại");
@@ -635,7 +638,7 @@
                 const prevPt = turf.point([recordedPoints[recordedPoints.length - 1].lng, recordedPoints[recordedPoints.length - 1].lat]);
                 const stepDistMet = turf.distance(prevPt, currentPt, { units: 'kilometers' }) * 1000;
                 
-                // Chỉ lưu nếu đã di chuyển tối thiểu 2 mét (tránh vệt GPS bị rối khi đứng yên một chỗ)
+                // Ghi điểm khi di chuyển từ 2 mét trở lên
                 if (stepDistMet >= 2.0) {
                     totalDistanceKm += (stepDistMet / 1000);
                     addPt = true;
@@ -656,7 +659,7 @@
             }
         }
 
-        recenterMap();
+        if (isRunning) recenterMap();
     }
 
     function updateUserMarker(position) {
@@ -707,17 +710,13 @@
         }
     }
 
-    function onGpsError(err) {
-        txtStatus.innerText = "Mất tín hiệu GPS";
-    }
-
     function recenterMap() {
         if (lastLat && lastLng) map.setView([lastLat, lastLng], map.getZoom());
     }
 
     btnRecenter.addEventListener('click', () => {
         if (lastLat && lastLng) map.setView([lastLat, lastLng], 17);
-        else alert("Chưa có toạ độ GPS!");
+        else alert("Đang tìm tín hiệu GPS...");
     });
 
     function exportGPX() {
@@ -756,6 +755,9 @@
         document.body.removeChild(a);
         URL.revokeObjectURL(downloadUrl);
     }
+
+    // Khởi động định vị ngay khi nạp trang
+    window.onload = startContinuousGPS;
 </script>
 </body>
 </html>

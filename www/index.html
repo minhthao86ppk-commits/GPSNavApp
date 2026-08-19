@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GPS Nav & Track Recorder</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        :root {
+            --brand-dark: #0f172a;
+            --brand-blue: #2563eb;
+            --brand-danger: #ef4444;
+            --brand-success: #16a34a;
+            --brand-record: #f97316;
+        }
+
+        body, html { 
+            margin: 0; padding: 0; height: 100%; width: 100%; 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            overflow: hidden;
+        }
+
+        #map {
+            position: absolute;
+            top: 0; bottom: 0; left: 0; right: 0;
+            z-index: 1;
+        }
+
+        .leaflet-top.leaflet-right {
+            top: 12px !important;
+            right: 12px !important;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .leaflet-bar, .leaflet-control-layers {
+            border: none !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important;
+            border-radius: 12px !important;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.95) !important;
+            backdrop-filter: blur(6px);
+        }
+
+        .leaflet-bar a {
+            background-color: transparent !important;
+            color: var(--brand-dark) !important;
+            border-bottom: 1px solid #f1f5f9 !important;
+            width: 38px !important;
+            height: 38px !important;
+            line-height: 38px !important;
+            font-size: 1.25rem !important;
+            font-weight: bold;
+        }
+
+        .leaflet-control-layers-toggle {
+            width: 38px !important;
+            height: 38px !important;
+        }
+
+        .leaflet-control-layers-expanded {
+            padding: 10px 14px !important;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--brand-dark);
+            border-radius: 12px !important;
+        }
+
+        .top-left-panel {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .mini-brand {
+            background: rgba(15, 23, 42, 0.92);
+            color: white;
+            padding: 7px 12px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .mode-switch-group {
+            display: flex;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(6px);
+            padding: 3px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            gap: 3px;
+        }
+
+        .btn-mode {
+            border: none;
+            background: transparent;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 5px 10px;
+            border-radius: 7px;
+            color: #64748b;
+            transition: all 0.2s;
+        }
+
+        .btn-mode.active {
+            background: var(--brand-blue);
+            color: white;
+        }
+
+        .btn-mode#mode-record.active {
+            background: var(--brand-record);
+        }
+
+        .compact-bottom-bar {
+            position: absolute;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 24px);
+            max-width: 540px;
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(10px);
+            border-radius: 18px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            z-index: 1000;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid rgba(0,0,0,0.06);
+        }
+
+        .info-core {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            gap: 3px;
+        }
+
+        .info-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .status-main {
+            font-size: 0.88rem;
+            font-weight: 800;
+            color: var(--brand-dark);
+            margin: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .rec-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--brand-danger);
+            border-radius: 50%;
+            display: none;
+        }
+        .recording .rec-dot {
+            display: inline-block;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink { 50% { opacity: 0.2; } }
+
+        .badge-speed {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--brand-blue);
+            background: #eff6ff;
+            padding: 2px 8px;
+            border-radius: 6px;
+            white-space: nowrap;
+        }
+
+        .info-sub-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.73rem;
+            color: #64748b;
+            font-weight: 600;
+        }
+
+        .status-sub, .status-progress {
+            margin: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .btn-circle {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+        
+        #btn-action {
+            background: var(--brand-blue);
+            color: white;
+        }
+        #btn-action.running {
+            background: var(--brand-danger);
+        }
+
+        #btn-secondary {
+            background: #f1f5f9;
+            color: var(--brand-dark);
+        }
+        #btn-secondary:disabled {
+            background: #f8fafc;
+            color: #cbd5e1;
+            cursor: not-allowed;
+        }
+
+        #btn-recenter {
+            background: #f1f5f9;
+            color: var(--brand-dark);
+        }
+        #btn-recenter:active, #btn-secondary:not(:disabled):active {
+            background: #e2e8f0;
+        }
+
+        .bar-warn {
+            background: var(--brand-danger) !important;
+            border-color: var(--brand-danger);
+        }
+        .bar-warn .status-main, 
+        .bar-warn .status-sub,
+        .bar-warn .status-progress { 
+            color: #ffffff !important; 
+        }
+        .bar-warn .badge-speed {
+            background: rgba(255, 255, 255, 0.25);
+            color: #ffffff;
+        }
+        .bar-warn .status-main {
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse { 50% { opacity: 0.7; } }
+
+        .user-arrow-wrapper {
+            position: relative;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .user-arrow-svg {
+            width: 28px;
+            height: 28px;
+            fill: var(--brand-blue);
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));
+            transition: transform 0.2s ease-out;
+        }
+
+        .leaflet-control-attribution { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="top-left-panel">
+    <div class="mini-brand"><i class="bi bi-geo-alt-fill text-warning me-1"></i>GPS NAV & TRACK</div>
+    <div class="mode-switch-group">
+        <button id="mode-nav" class="btn-mode active"><i class="bi bi-compass me-1"></i>Dẫn đường</button>
+        <button id="mode-record" class="btn-mode"><i class="bi bi-record-circle me-1"></i>Ghi đường</button>
+    </div>
+</div>
+
+<div id="map"></div>
+
+<input type="file" id="gpxFileInput" accept=".gpx" style="display: none;">
+
+<div class="compact-bottom-bar" id="ctrlBar">
+    <button id="btn-action" class="btn-circle shadow-sm" title="Thao tác chính">
+        <i class="bi bi-play-fill" id="actionIcon"></i>
+    </button>
+
+    <div class="info-core" id="infoArea">
+        <div class="info-header">
+            <p class="status-main" id="txtMain">
+                <span class="rec-dot" id="recDot"></span>
+                <span id="txtStatus">Chọn file GPX để bắt đầu</span>
+            </p>
+            <span class="badge-speed" id="txtSpeed"><i class="bi bi-speedometer2 me-1"></i>0 km/h</span>
+        </div>
+        <div class="info-sub-row">
+            <p class="status-sub" id="txtSub">Chưa nạp tệp dẫn đường</p>
+            <p class="status-progress" id="txtProgress">-- km</p>
+        </div>
+    </div>
+
+    <button id="btn-secondary" class="btn-circle" title="Tải file GPX">
+        <i class="bi bi-folder2-open" id="secondaryIcon"></i>
+    </button>
+
+    <button id="btn-recenter" class="btn-circle" title="Căn giữa vị trí">
+        <i class="bi bi-crosshairs"></i>
+    </button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.7.0/gpx.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
+<script>
+    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+    const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20 });
+    const esriSatellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
+    const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 });
+
+    const map = L.map('map', { 
+        zoomControl: true, 
+        touchZoom: true, 
+        scrollWheelZoom: true, 
+        doubleClickZoom: true,
+        layers: [osmLayer]
+    }).setView([21.0285, 105.8542], 16);
+
+    map.zoomControl.setPosition('topright');
+    L.control.layers({
+        "Đường phố": osmLayer,
+        "Google Vệ tinh": googleHybrid,
+        "Esri Vệ tinh": esriSatellite,
+        "Chế độ tối": darkLayer
+    }, null, { position: 'topright' }).addTo(map);
+
+    let currentMode = 'nav';
+    let isRunning = false;
+    let watchId = null;
+    let wakeLock = null;
+    let lastLat = null, lastLng = null;
+    let lastPosition = null;
+
+    let gpxLayer = null;
+    let routeGeoJSON = null;
+    let mainRouteLine = null;
+    let totalRouteLength = 0;
+
+    let recordedPoints = [];
+    let totalDistanceKm = 0;
+    let timerInterval = null;
+    let startRecordTime = null;
+    let recordPolyline = L.polyline([], { color: '#f97316', weight: 6, opacity: 0.9 }).addTo(map);
+
+    let userMarker = null;
+    let accuracyCircle = null;
+
+    const ctrlBar = document.getElementById('ctrlBar');
+    const btnAction = document.getElementById('btn-action');
+    const actionIcon = document.getElementById('actionIcon');
+    const btnSecondary = document.getElementById('btn-secondary');
+    const secondaryIcon = document.getElementById('secondaryIcon');
+    const btnRecenter = document.getElementById('btn-recenter');
+    const gpxFileInput = document.getElementById('gpxFileInput');
+    const modeNav = document.getElementById('mode-nav');
+    const modeRecord = document.getElementById('mode-record');
+
+    const txtStatus = document.getElementById('txtStatus');
+    const txtSpeed = document.getElementById('txtSpeed');
+    const txtSub = document.getElementById('txtSub');
+    const txtProgress = document.getElementById('txtProgress');
+
+    const arrowIcon = L.divIcon({
+        className: 'user-arrow-wrapper',
+        html: `<svg class="user-arrow-svg" id="arrowSvg" viewBox="0 0 24 24"><path d="M12 2L21 21L12 17L3 21L12 2Z"/></svg>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+    });
+
+    modeNav.addEventListener('click', () => switchMode('nav'));
+    modeRecord.addEventListener('click', () => switchMode('record'));
+
+    function switchMode(mode) {
+        if (isRunning) stopProcess();
+        currentMode = mode;
+
+        if (mode === 'nav') {
+            modeNav.classList.add('active');
+            modeRecord.classList.remove('active');
+            btnAction.style.background = 'var(--brand-blue)';
+            secondaryIcon.className = "bi bi-folder2-open";
+            btnSecondary.title = "Nạp tệp GPX từ thiết bị";
+            btnSecondary.disabled = false;
+            
+            if (mainRouteLine) {
+                txtStatus.innerText = "Lộ trình đã sẵn sàng";
+                txtSub.innerText = "Bấm Play để bắt đầu";
+                txtProgress.innerText = `${totalRouteLength.toFixed(1)} km`;
+            } else {
+                txtStatus.innerText = "Chế độ Dẫn đường";
+                txtSub.innerText = "Chọn file GPX để nạp lộ trình";
+                txtProgress.innerText = "-- km";
+            }
+        } else {
+            modeRecord.classList.add('active');
+            modeNav.classList.remove('active');
+            btnAction.style.background = 'var(--brand-record)';
+            secondaryIcon.className = "bi bi-download";
+            btnSecondary.title = "Lưu và tải file GPX";
+            btnSecondary.disabled = recordedPoints.length === 0;
+
+            txtStatus.innerText = "Sẵn sàng ghi lộ trình";
+            txtSub.innerText = `Đã đi: ${totalDistanceKm.toFixed(2)} km`;
+            txtProgress.innerText = `${recordedPoints.length} điểm`;
+        }
+    }
+
+    btnSecondary.addEventListener('click', function() {
+        if (currentMode === 'nav') {
+            gpxFileInput.click();
+        } else {
+            exportGPX();
+        }
+    });
+
+    gpxFileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+            const gpxData = evt.target.result;
+            loadGpxData(gpxData, file.name);
+        };
+        reader.readAsText(file);
+    });
+
+    function loadGpxData(gpxText, fileName) {
+        if (gpxLayer) map.removeLayer(gpxLayer);
+
+        gpxLayer = new L.GPX(gpxText, {
+            async: true,
+            polyline_options: { color: '#2563eb', weight: 6, opacity: 0.85, lineJoin: 'round' }
+        }).on('loaded', function(e) {
+            map.fitBounds(e.target.getBounds());
+            routeGeoJSON = e.target.toGeoJSON();
+
+            for (let feat of routeGeoJSON.features) {
+                if (feat.geometry.type === 'LineString' || feat.geometry.type === 'MultiLineString') {
+                    mainRouteLine = feat;
+                    break;
+                }
+            }
+            if (!mainRouteLine) mainRouteLine = routeGeoJSON.features[0];
+
+            totalRouteLength = turf.length(mainRouteLine, { units: 'kilometers' });
+
+            txtStatus.innerText = "Đã nạp: " + fileName;
+            txtSub.innerText = "Bấm Play để bắt đầu đi lại";
+            txtProgress.innerText = `${totalRouteLength.toFixed(1)} km`;
+        }).addTo(map);
+    }
+
+    btnAction.addEventListener('click', async function() {
+        if (isRunning) {
+            stopProcess();
+            return;
+        }
+
+        if (currentMode === 'nav' && !mainRouteLine) {
+            alert("Vui lòng bấm nút thư mục để chọn tệp .GPX trước khi bắt đầu!");
+            gpxFileInput.click();
+            return;
+        }
+
+        if (!navigator.geolocation) {
+            alert("Thiết bị không hỗ trợ định vị GPS!");
+            return;
+        }
+
+        if ('wakeLock' in navigator) {
+            try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
+        }
+
+        isRunning = true;
+        this.classList.add('running');
+        actionIcon.className = "bi bi-stop-fill";
+
+        if (currentMode === 'record') {
+            ctrlBar.classList.add('recording');
+            btnSecondary.disabled = true;
+            startRecordTime = Date.now();
+            timerInterval = setInterval(() => {
+                const el = Math.floor((Date.now() - startRecordTime)/1000);
+                const m = String(Math.floor(el/60)).padStart(2,'0');
+                const s = String(el%60).padStart(2,'0');
+                txtStatus.innerText = `Đang ghi: ${m}:${s}`;
+            }, 1000);
+        } else {
+            txtStatus.innerText = "Đang dẫn đường...";
+        }
+
+        watchId = navigator.geolocation.watchPosition(onGpsSuccess, onGpsError, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        });
+    });
+
+    function stopProcess() {
+        isRunning = false;
+        btnAction.classList.remove('running');
+        actionIcon.className = "bi bi-play-fill";
+        ctrlBar.className = "compact-bottom-bar";
+        txtSpeed.innerHTML = `<i class="bi bi-speedometer2 me-1"></i>0 km/h`;
+
+        if (watchId) navigator.geolocation.clearWatch(watchId);
+        if (wakeLock) { wakeLock.release(); wakeLock = null; }
+        if (timerInterval) clearInterval(timerInterval);
+
+        if (currentMode === 'record') {
+            txtStatus.innerText = "Đã tạm dừng ghi";
+            btnSecondary.disabled = recordedPoints.length === 0;
+        } else {
+            txtStatus.innerText = "Đã dừng chỉ đường";
+        }
+    }
+
+    function onGpsSuccess(position) {
+        lastLat = position.coords.latitude;
+        lastLng = position.coords.longitude;
+        const currentPt = turf.point([lastLng, lastLat]);
+        const speedKmh = position.coords.speed ? Math.round(position.coords.speed * 3.6) : 0;
+        const accuracyMet = Math.round(position.coords.accuracy || 0);
+
+        updateUserMarker(position);
+        txtSpeed.innerHTML = `<i class="bi bi-speedometer2 me-1"></i>${speedKmh} km/h`;
+
+        if (currentMode === 'nav' && mainRouteLine) {
+            const distanceMet = Math.round(turf.pointToLineDistance(currentPt, mainRouteLine, { units: 'kilometers' }) * 1000);
+            const tolerance = Math.max(25, accuracyMet);
+
+            if (distanceMet > tolerance) {
+                ctrlBar.className = "compact-bottom-bar bar-warn";
+                txtStatus.innerText = "CẢNH BÁO: SAI LỘ TRÌNH!";
+                txtSub.innerText = `Lệch đường cũ: ${distanceMet}m`;
+
+                if (!window.lastSpeakTime || Date.now() - window.lastSpeakTime > 15000) {
+                    speak("Bạn đã đi sai lộ trình cũ, hãy quay lại");
+                    window.lastSpeakTime = Date.now();
+                }
+            } else {
+                ctrlBar.className = "compact-bottom-bar";
+                txtStatus.innerText = "ĐANG ĐI ĐÚNG ĐƯỜNG CŨ";
+                txtSub.innerText = `Lệch: ${distanceMet}m (±${accuracyMet}m)`;
+            }
+
+            try {
+                const snappedPt = turf.nearestPointOnLine(mainRouteLine, currentPt);
+                const coords = mainRouteLine.geometry.type === 'LineString' 
+                    ? mainRouteLine.geometry.coordinates 
+                    : mainRouteLine.geometry.coordinates[0];
+                const destPt = turf.point(coords[coords.length - 1]);
+                const remainingLine = turf.lineSlice(snappedPt, destPt, mainRouteLine);
+                const remainingDist = turf.length(remainingLine, { units: 'kilometers' });
+                const percent = Math.max(0, Math.min(100, Math.round((1 - (remainingDist / totalRouteLength)) * 100)));
+
+                txtProgress.innerText = `Còn ${remainingDist.toFixed(1)} km (${percent}%)`;
+            } catch(e) {
+                txtProgress.innerText = "Đã đến đích";
+            }
+        } 
+        else if (currentMode === 'record' && isRunning) {
+            let addPt = false;
+            if (recordedPoints.length === 0) {
+                addPt = true;
+            } else {
+                const prevPt = turf.point([recordedPoints[recordedPoints.length - 1].lng, recordedPoints[recordedPoints.length - 1].lat]);
+                const stepDistMet = turf.distance(prevPt, currentPt, { units: 'kilometers' }) * 1000;
+                if (stepDistMet >= 3) {
+                    totalDistanceKm += (stepDistMet / 1000);
+                    addPt = true;
+                }
+            }
+
+            if (addPt) {
+                recordedPoints.push({
+                    lat: lastLat,
+                    lng: lastLng,
+                    ele: position.coords.altitude || 0,
+                    time: new Date(position.timestamp).toISOString(),
+                    speed: position.coords.speed || 0
+                });
+                recordPolyline.addLatLng([lastLat, lastLng]);
+                txtSub.innerText = `Đã đi: ${totalDistanceKm.toFixed(2)} km`;
+                txtProgress.innerText = `${recordedPoints.length} điểm`;
+            }
+        }
+
+        recenterMap();
+    }
+
+    function updateUserMarker(position) {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const accuracyMet = Math.round(position.coords.accuracy || 0);
+        let heading = position.coords.heading;
+        const currentPt = turf.point([lng, lat]);
+
+        if ((heading === null || isNaN(heading)) && lastPosition) {
+            heading = turf.bearing(lastPosition, currentPt);
+            if (heading < 0) heading += 360;
+        }
+        lastPosition = currentPt;
+
+        if (!userMarker) {
+            userMarker = L.marker([lat, lng], { icon: arrowIcon }).addTo(map);
+        } else {
+            userMarker.setLatLng([lat, lng]);
+        }
+
+        const arrowElement = document.getElementById('arrowSvg');
+        if (arrowElement && heading !== null && !isNaN(heading)) {
+            arrowElement.style.transform = `rotate(${heading}deg)`;
+        }
+
+        if (!accuracyCircle) {
+            accuracyCircle = L.circle([lat, lng], {
+                radius: accuracyMet,
+                color: currentMode === 'record' ? '#ea580c' : '#2563eb',
+                fillColor: currentMode === 'record' ? '#fb923c' : '#3b82f6',
+                fillOpacity: 0.12,
+                weight: 1.5,
+                dashArray: '4, 4'
+            }).addTo(map);
+        } else {
+            accuracyCircle.setLatLng([lat, lng]);
+            accuracyCircle.setRadius(accuracyMet);
+        }
+    }
+
+    function speak(text) {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'vi-VN';
+            window.speechSynthesis.speak(utterance);
+        }
+    }
+
+    function onGpsError(err) {
+        txtStatus.innerText = "Mất tín hiệu GPS";
+    }
+
+    function recenterMap() {
+        if (lastLat && lastLng) map.setView([lastLat, lastLng], map.getZoom());
+    }
+
+    btnRecenter.addEventListener('click', () => {
+        if (lastLat && lastLng) map.setView([lastLat, lastLng], 17);
+        else alert("Chưa có toạ độ GPS!");
+    });
+
+    function exportGPX() {
+        if (recordedPoints.length === 0) {
+            alert("Chưa có dữ liệu để lưu!");
+            return;
+        }
+
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+        const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '');
+        const fileName = `Lộ_trình_${dateStr}_${timeStr}.gpx`;
+
+        let gpx = '<' + '?xml version="1.0" encoding="UTF-8"?>\n';
+        gpx += '<gpx version="1.1" creator="GPS Nav Pro" xmlns="http://www.topografix.com/GPX/1/1">\n';
+        gpx += '  <metadata>\n    <name>' + fileName + '</name>\n    <time>' + now.toISOString() + '</time>\n  </metadata>\n';
+        gpx += '  <trk>\n    <name>Lộ trình ngày ' + now.toLocaleDateString('vi-VN') + '</name>\n    <trkseg>\n';
+
+        recordedPoints.forEach(pt => {
+            gpx += '      <trkpt lat="' + pt.lat.toFixed(6) + '" lon="' + pt.lng.toFixed(6) + '">\n';
+            if (pt.ele) gpx += '        <ele>' + pt.ele.toFixed(1) + '</ele>\n';
+            gpx += '        <time>' + pt.time + '</time>\n';
+            if (pt.speed) gpx += '        <speed>' + pt.speed.toFixed(2) + '</speed>\n';
+            gpx += '      </trkpt>\n';
+        });
+
+        gpx += '    </trkseg>\n  </trk>\n</gpx>';
+
+        const blob = new Blob([gpx], { type: 'application/gpx+xml;charset=utf-8' });
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(downloadUrl);
+    }
+</script>
+</body>
+</html>

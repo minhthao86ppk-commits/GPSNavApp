@@ -1,6 +1,7 @@
 import UIKit
 import Capacitor
 import CoreLocation
+import AVFoundation
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate, CLLocationManagerDelegate {
@@ -10,46 +11,30 @@ class AppDelegate: UIResponder, UIApplicationDelegate, CLLocationManagerDelegate
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         
-        // Khởi tạo GPS Native để giữ kết nối vệ tinh 24/7 khi khóa màn hình
-        self.locationManager = CLLocationManager()
-        self.locationManager?.delegate = self
-        self.locationManager?.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        self.locationManager?.distanceFilter = 2
-        
-        self.locationManager?.pausesLocationUpdatesAutomatically = false
-        self.locationManager?.allowsBackgroundLocationUpdates = true
-        self.locationManager?.showsBackgroundLocationIndicator = true
-        
-        self.locationManager?.requestAlwaysAuthorization()
-        self.locationManager?.startUpdatingLocation()
+        // 1. Kích hoạt phiên âm thanh chạy nền để giữ tiến trình Web thức khi khóa máy
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("Audio session error: \(error)")
+        }
+
+        // 2. Kích hoạt chip GPS Native chạy ngầm liên tục 24/7
+        let manager = CLLocationManager()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        manager.distanceFilter = kCLDistanceFilterNone
+        manager.pausesLocationUpdatesAutomatically = false
+        manager.allowsBackgroundLocationUpdates = true
+        manager.showsBackgroundLocationIndicator = true
+        manager.requestAlwaysAuthorization()
+        manager.startUpdatingLocation()
+        self.locationManager = manager
 
         return true
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        // Luồng GPS Native duy trì tiến trình chạy ngầm
-    }
-
-    func applicationWillResignActive(_ application: UIApplication) {
-    }
-
-    func applicationDidEnterBackground(_ application: UIApplication) {
-    }
-
-    func applicationWillEnterForeground(_ application: UIApplication) {
-    }
-
-    func applicationDidBecomeActive(_ application: UIApplication) {
-    }
-
-    func applicationWillTerminate(_ application: UIApplication) {
-    }
-
-    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        return ApplicationDelegateProxy.shared.application(app, open: url, options: options)
-    }
-
-    func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
-        return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
+        // Duy trì bắt sóng vệ tinh liên tục trong nền
     }
 }

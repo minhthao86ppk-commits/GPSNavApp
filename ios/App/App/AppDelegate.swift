@@ -6,30 +6,29 @@ import CoreLocation
 class AppDelegate: UIResponder, UIApplicationDelegate, CLLocationManagerDelegate {
 
     var window: UIWindow?
-    let nativeLocationManager = CLLocationManager()
+    var locationManager: CLLocationManager?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         
-        // 1. Cấu hình bộ định vị Native độ chính xác cao nhất cho dẫn đường
-        nativeLocationManager.delegate = self
-        nativeLocationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        nativeLocationManager.distanceFilter = 2 // Bắt tọa độ mỗi khi di chuyển từ 2 mét
+        // Khởi tạo GPS Native trong hàm chính để không bị lỗi build
+        self.locationManager = CLLocationManager()
+        self.locationManager?.delegate = self
+        self.locationManager?.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        self.locationManager?.distanceFilter = 2
         
-        // 2. Ép buộc iOS KHÔNG ĐƯỢC TẮT GPS khi khóa màn hình
-        nativeLocationManager.pausesLocationUpdatesAutomatically = false
-        nativeLocationManager.allowsBackgroundLocationUpdates = true
-        nativeLocationManager.showsBackgroundLocationIndicator = true
+        // Cấu hình chạy ngầm không ngắt quãng
+        self.locationManager?.pausesLocationUpdatesAutomatically = false
+        self.locationManager?.allowsBackgroundLocationUpdates = true
+        self.locationManager?.showsBackgroundLocationIndicator = true
         
-        // 3. Yêu cầu quyền luôn luôn chạy ngầm
-        nativeLocationManager.requestAlwaysAuthorization()
-        nativeLocationManager.startUpdatingLocation()
+        self.locationManager?.requestAlwaysAuthorization()
+        self.locationManager?.startUpdatingLocation()
 
         return true
     }
 
-    // Hàm nhận tọa độ Native liên tục từ vệ tinh để giữ ứng dụng luôn thức
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        // iOS duy trì tiến trình chạy ngầm liên tục
+        // Duy trì tiến trình chạy ngầm khi khóa màn hình
     }
 
     func applicationWillResignActive(_ application: UIApplication) {}

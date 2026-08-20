@@ -69,13 +69,14 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
+		<string>fetch</string>
 		<string>audio</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Ứng dụng cần quyền vị trí để ghi lại đường đi của bạn.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Ứng dụng cần GPS liên tục kể cả khi tắt màn hình để ghi lại hành trình.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Ứng dụng cần GPS liên tục kể cả khi tắt màn hình để ghi lại hành trình.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Ứng dụng cần GPS để dẫn đường và ghi lại lộ trình.</string>
+	<string>Ứng dụng cần GPS chạy ngầm liên tục để theo dõi hành trình.</string>
 </dict>
 </plist>

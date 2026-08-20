@@ -534,11 +534,27 @@
             return;
         }
 
+        // 1. Ép lấy ngay vị trí hiện tại để lập tức chuyển bản đồ về chỗ người dùng
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                lastLat = pos.coords.latitude;
+                lastLng = pos.coords.longitude;
+                map.setView([lastLat, lastLng], 17);
+                hasCenteredInitial = true;
+                updateUserMarker(pos);
+                txtStatus.innerText = "Đã nhận vị trí GPS";
+                txtSub.innerText = "Độ chính xác: ±" + Math.round(pos.coords.accuracy) + "m";
+            },
+            (err) => console.log(err),
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+
+        // 2. Theo dõi liên tục
         watchId = navigator.geolocation.watchPosition(
             onGpsSuccess,
             (err) => {
                 console.warn(err);
-                txtStatus.innerText = "Chờ tín hiệu vệ tinh...";
+                txtStatus.innerText = "Đang dò tín hiệu vệ tinh...";
             },
             {
                 enableHighAccuracy: true,
@@ -549,34 +565,31 @@
     }
 
     function onGpsSuccess(position) {
-        const accuracyMet = Math.round(position.coords.accuracy || 0);
-        
-        // 1. SIẾT CHẶT ĐỘ CHÍNH XÁC: Bỏ qua hoàn toàn nếu sai số > 20m (chống sóng ảo)
-        if (accuracyMet > 20) {
-            return;
-        }
-
         lastLat = position.coords.latitude;
         lastLng = position.coords.longitude;
-        const currentPt = turf.point([lastLng, lastLat]);
+        const accuracyMet = Math.round(position.coords.accuracy || 0);
         const speedKmh = position.coords.speed ? Math.round(position.coords.speed * 3.6) : 0;
+        const currentPt = turf.point([lastLng, lastLat]);
 
-        // Tự động căn giữa bản đồ lần đầu
+        // LUÔN LUÔN CẬP NHẬT MŨI TÊN VÀ BẢN ĐỒ VỀ ĐÚNG VỊ TRÍ BẠN ĐỨNG
         if (!hasCenteredInitial) {
             map.setView([lastLat, lastLng], 17);
             hasCenteredInitial = true;
-            if (!isRunning) {
-                txtStatus.innerText = currentMode === 'nav' ? "Đã nhận vị trí GPS" : "Sẵn sàng ghi";
-                txtSub.innerText = "Độ chính xác: ±" + accuracyMet + "m";
-            }
         }
 
         updateUserMarker(position);
         txtSpeed.innerHTML = `<i class="bi bi-speedometer2 me-1"></i>${speedKmh} km/h`;
 
-        if (currentMode === 'nav' && mainRouteLine && isRunning) {
+        if (!isRunning) {
+            txtStatus.innerText = currentMode === 'nav' ? "Lộ trình sẵn sàng" : "Sẵn sàng ghi";
+            txtSub.innerText = "Độ chính xác: ±" + accuracyMet + "m";
+            return;
+        }
+
+        // LOGIC DẪN ĐƯỜNG
+        if (currentMode === 'nav' && mainRouteLine) {
             const distanceMet = Math.round(turf.pointToLineDistance(currentPt, mainRouteLine, { units: 'kilometers' }) * 1000);
-            const tolerance = Math.max(20, accuracyMet);
+            const tolerance = Math.max(25, accuracyMet);
 
             if (distanceMet > tolerance) {
                 ctrlBar.className = "compact-bottom-bar bar-warn";
@@ -608,7 +621,8 @@
                 txtProgress.innerText = "Đã đến đích";
             }
         } 
-        else if (currentMode === 'record' && isRunning) {
+        // LOGIC GHI LỘ TRÌNH
+        else if (currentMode === 'record') {
             let addPt = false;
             
             if (recordedPoints.length === 0) {
@@ -617,9 +631,8 @@
                 const prevPt = turf.point([recordedPoints[recordedPoints.length - 1].lng, recordedPoints[recordedPoints.length - 1].lat]);
                 const stepDistMet = turf.distance(prevPt, currentPt, { units: 'kilometers' }) * 1000;
                 
-                // 2. CHỐNG BÚI RỐI KHI ĐỨNG YÊN:
-                // Chỉ ghi điểm khi di chuyển thực tế từ 5 mét trở lên VÀ (có tốc độ > 1km/h hoặc khoảng cách >= 8m)
-                if (stepDistMet >= 5.0 && (speedKmh >= 1 || stepDistMet >= 8.0)) {
+                // Chỉ lưu điểm khi di chuyển thực tế từ 3 mét trở lên
+                if (stepDistMet >= 3.0 && accuracyMet <= 35) {
                     totalDistanceKm += (stepDistMet / 1000);
                     addPt = true;
                 }
@@ -639,7 +652,7 @@
             }
         }
 
-        if (isRunning) recenterMap();
+        recenterMap();
     }
 
     function updateUserMarker(position) {
